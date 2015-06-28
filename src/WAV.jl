@@ -551,11 +551,6 @@ function read_data(io::IO, chunk_size, fmt::WAVFormat, ::Type{WAVNative}, subran
     end
 end
 
-# used when "subrange" is None
-function read_data(io::IO, chunk_size, fmt::WAVFormat, t::Type{WAVNative}, ::Union)
-    read_data(io, chunk_size, fmt, t, 1:convert(UInt, chunk_size / fmt.block_align))
-end
-
 function read_data(io::IO, chunk_size, fmt::WAVFormat, ::Type{Float64}, subrange)
     samples = read_data(io, chunk_size, fmt, WAVNative, subrange)
     if isformat(fmt, WAVE_FORMAT_PCM)
@@ -630,8 +625,9 @@ function write_data(io::IO, fmt::WAVFormat, samples::Array)
     end
 end
 
-make_range(subrange) = subrange
-make_range(subrange::Number) = 1:convert(Int, subrange)
+make_range(subrange, chunk_size, fmt) = 1:convert(UInt, chunk_size / fmt.block_align)
+make_range{T}(subrange::Range{T}, chunk_size, fmt) = subrange
+make_range(subrange::Number, chunk_size, fmt) = 1:convert(Int, subrange)
 
 function wavread(io::IO, format=Float64, subrange=None)
     chunk_size = read_header(io)
@@ -664,7 +660,7 @@ function wavread(io::IO, format=Float64, subrange=None)
             nbits = oftype(nbits, bits_per_sample(fmt))
             opt[:fmt] = fmt
         elseif subchunk_id == b"data"
-            samples = read_data(io, subchunk_size, fmt, format, make_range(subrange))
+            samples = read_data(io, subchunk_size, fmt, format, make_range(subrange, subchunk_size, fmt))
         else
             opt[symbol(subchunk_id)] = read(io, UInt8, subchunk_size)
         end
