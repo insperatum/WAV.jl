@@ -643,7 +643,7 @@ make_range(subrange::Number) = 1:convert(Int, subrange)
 function wavread(io::IO, subrange=None, format=Float64)
     chunk_size = read_header(io)
     samples = Array(Float64)
-    nbits = 0
+    nbits = @compat UInt16(0)
     sample_rate = @compat Float32(0.0)
     opt = Dict{Symbol, Any}()
 
