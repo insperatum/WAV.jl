@@ -633,7 +633,7 @@ end
 make_range(subrange) = subrange
 make_range(subrange::Number) = 1:convert(Int, subrange)
 
-function wavread(io::IO, subrange=None, format=Float64)
+function wavread(io::IO, format=Float64, subrange=None)
     chunk_size = read_header(io)
     samples = None
     nbits = 0
@@ -674,13 +674,13 @@ end
 
 function wavread(filename::String; subrange=None, format=Float64)
     open(filename, "r") do io
-        wavread(io, subrange, format)
+        wavread(io, format, subrange)
     end
 end
 
-function wavread(filename::String, subrange, format)
+function wavread(filename::String, format=Float64, subrange=None)
     open(filename, "r") do io
-        wavread(io, subrange, format)
+        wavread(io, format, subrange)
     end
 end
 
@@ -694,7 +694,7 @@ function wavread(io::IO; subrange=None, format=Float64)
             format = WAVSize
         end
     end
-    wavread(io, subrange, format)
+    wavread(io, format, subrange)
 end
 wavread(filename::String, fmt::String) = wavread(filename, format=fmt)
 
