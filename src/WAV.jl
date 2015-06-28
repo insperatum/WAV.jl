@@ -74,6 +74,8 @@ immutable GetSize
 end
 immutable ConvertToDouble
 end
+immutable GetAllSamples
+end
 
 # used by WAVE_FORMAT_EXTENSIBLE
 immutable WAVFormatExtension
@@ -534,11 +536,11 @@ convert_pcm_to_double(samples::Array{UInt8}, nbits::Integer) = convert(Array{Flo
 # support every bit width from 9 to 64 bits
 convert_pcm_to_double{T<:Signed}(samples::Array{T}, nbits::Integer) = convert(Array{Float64}, samples) / (2^(nbits - 1) - 1)
 
-function read_data(::IO, chunk_size, fmt::WAVFormat, ::GetSize, subrange)
+function read_data(::IO, chunk_size, fmt::WAVFormat, ::GetSize, subrange::Range)
     convert(Int, chunk_size / fmt.block_align), convert(Int, fmt.nchannels)
 end
 
-function read_data(io::IO, chunk_size, fmt::WAVFormat, ::GetNative, subrange)
+function read_data(io::IO, chunk_size, fmt::WAVFormat, ::GetNative, subrange::Range)
     if isformat(fmt, WAVE_FORMAT_PCM)
         read_pcm_samples(io, fmt, subrange)
     elseif isformat(fmt, WAVE_FORMAT_IEEE_FLOAT)
@@ -552,7 +554,7 @@ function read_data(io::IO, chunk_size, fmt::WAVFormat, ::GetNative, subrange)
     end
 end
 
-function read_data(io::IO, chunk_size, fmt::WAVFormat, ::ConvertToDouble, subrange)
+function read_data(io::IO, chunk_size, fmt::WAVFormat, ::ConvertToDouble, subrange::Range)
     samples = read_data(io, chunk_size, fmt, GetNative(), subrange)
     if isformat(fmt, WAVE_FORMAT_PCM)
         convert_pcm_to_double(samples, bits_per_sample(fmt))
@@ -561,6 +563,14 @@ function read_data(io::IO, chunk_size, fmt::WAVFormat, ::ConvertToDouble, subran
     else
         convert(Array{Float64}, samples)
     end
+end
+
+function read_data{ReadBehavior}(io::IO, chunk_size, fmt::WAVFormat, how::ReadBehavior, ::GetAllSamples)
+    read_data(io, chunk_size, fmt, how, 1:convert(UInt, chunk_size / fmt.block_align))
+end
+
+function read_data{ReadBehavior}(io::IO, chunk_size, fmt::WAVFormat, how::ReadBehavior, n::Number)
+    read_data(io, chunk_size, fmt, how, 1:convert(Int, n))
 end
 
 function write_pcm_samples{T<:Integer}(io::IO, fmt::WAVFormat, samples::Array{T})
@@ -626,15 +636,11 @@ function write_data(io::IO, fmt::WAVFormat, samples::Array)
     end
 end
 
-make_range(subrange, chunk_size, fmt) = 1:convert(UInt, chunk_size / fmt.block_align)
-make_range(subrange::Range, chunk_size, fmt) = subrange
-make_range(subrange::Number, chunk_size, fmt) = 1:convert(Int, subrange)
-
 default_samples(::Type{GetNative}) = []
 default_samples(::Type{GetSize}) = (0, 0)
 default_samples(::Type{ConvertToDouble}) = Array{Float64}[]
 
-function wavread{ReadBehavior}(io::IO, how::ReadBehavior=ConvertToDouble(), subrange=None)
+function wavread{ReadBehavior}(io::IO, how::ReadBehavior=ConvertToDouble(), subrange=GetAllSamples())
     chunk_size = read_header(io)
     samples = default_samples(ReadBehavior)
     nbits = 0
@@ -665,7 +671,7 @@ function wavread{ReadBehavior}(io::IO, how::ReadBehavior=ConvertToDouble(), subr
             nbits = oftype(nbits, bits_per_sample(fmt))
             opt[:fmt] = fmt
         elseif subchunk_id == b"data"
-            samples = read_data(io, subchunk_size, fmt, how, make_range(subrange, subchunk_size, fmt))
+            samples = read_data(io, subchunk_size, fmt, how, subrange)
         else
             opt[symbol(subchunk_id)] = read(io, UInt8, subchunk_size)
         end
@@ -673,19 +679,19 @@ function wavread{ReadBehavior}(io::IO, how::ReadBehavior=ConvertToDouble(), subr
     return samples, sample_rate, nbits, opt
 end
 
-function wavread(filename::String; subrange=None, format=ConvertToDouble())
+function wavread(filename::String; subrange=GetAllSamples(), format=ConvertToDouble())
     open(filename, "r") do io
         wavread(io, format, subrange)
     end
 end
 
-function wavread(filename::String, format=ConvertToDouble(), subrange=None)
+function wavread(filename::String, format=ConvertToDouble(), subrange=GetAllSamples())
     open(filename, "r") do io
         wavread(io, format, subrange)
     end
 end
 
-function wavread(io::IO; subrange=None, format=ConvertToDouble())
+function wavread(io::IO; subrange=GetAllSamples(), format=ConvertToDouble())
     if typeof(format) <: AbstractString
         if format == "double"
             format = ConvertToDouble()
