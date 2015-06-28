@@ -626,7 +626,7 @@ function write_data(io::IO, fmt::WAVFormat, samples::Array)
 end
 
 make_range(subrange, chunk_size, fmt) = 1:convert(UInt, chunk_size / fmt.block_align)
-make_range{T}(subrange::Range{T}, chunk_size, fmt) = subrange
+make_range(subrange::Range, chunk_size, fmt) = subrange
 make_range(subrange::Number, chunk_size, fmt) = 1:convert(Int, subrange)
 
 function wavread(io::IO, format=Float64, subrange=None)
