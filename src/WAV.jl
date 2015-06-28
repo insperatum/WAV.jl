@@ -643,7 +643,7 @@ make_range(subrange::Number) = 1:convert(Int, subrange)
 function wavread(io::IO, subrange=None, format=Float64)
     chunk_size = read_header(io)
     samples = Array(Float64)
-    nbits = @compat UInt16(0)
+    nbits = 0
     sample_rate = @compat Float32(0.0)
     opt = Dict{Symbol, Any}()
 
@@ -667,8 +667,8 @@ function wavread(io::IO, subrange=None, format=Float64)
         # check the subchunk ID
         if subchunk_id == b"fmt "
             fmt = read_format(io, subchunk_size)
-            sample_rate = @compat Float32(fmt.sample_rate)
-            nbits = bits_per_sample(fmt)
+            sample_rate = oftype(sample_rate, fmt.sample_rate)
+            nbits = oftype(nbits, bits_per_sample(fmt))
             opt[:fmt] = fmt
         elseif subchunk_id == b"data"
             samples = read_data(io, subchunk_size, fmt, format, make_range(subrange))
