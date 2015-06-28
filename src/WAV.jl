@@ -538,40 +538,33 @@ function read_data(::IO, chunk_size, fmt::WAVFormat, ::Type{WAVSize}, subrange)
 end
 
 function read_data(io::IO, chunk_size, fmt::WAVFormat, ::Type{WAVNative}, subrange)
-    samples = None
-    if subrange === None
-        # each block stores fmt.nchannels channels
-        subrange = 1:convert(UInt, chunk_size / fmt.block_align)
-    end
     if isformat(fmt, WAVE_FORMAT_PCM)
-        samples = read_pcm_samples(io, fmt, subrange)
-        convert_to_double = x -> convert_pcm_to_double(x, bits_per_sample(fmt))
+        read_pcm_samples(io, fmt, subrange)
     elseif isformat(fmt, WAVE_FORMAT_IEEE_FLOAT)
-        samples = read_ieee_float_samples(io, fmt, subrange)
+        read_ieee_float_samples(io, fmt, subrange)
     elseif isformat(fmt, WAVE_FORMAT_MULAW)
-        samples = read_mulaw_samples(io, fmt, subrange)
-        convert_to_double = x -> convert_pcm_to_double(x, 16)
+        read_mulaw_samples(io, fmt, subrange)
     elseif isformat(fmt, WAVE_FORMAT_ALAW)
-        samples = read_alaw_samples(io, fmt, subrange)
-        convert_to_double = x -> convert_pcm_to_double(x, 16)
+        read_alaw_samples(io, fmt, subrange)
     else
         error("$(fmt.compression_code) is an unsupported compression code!")
     end
-    samples
+end
+
+# used when "subrange" is None
+function read_data(io::IO, chunk_size, fmt::WAVFormat, t::Type{WAVNative}, ::Union)
+    read_data(io, chunk_size, fmt, t, 1:convert(UInt, chunk_size / fmt.block_align))
 end
 
 function read_data(io::IO, chunk_size, fmt::WAVFormat, ::Type{Float64}, subrange)
-    if isformat(fmt, WAVE_FORMAT_PCM)
-        convert_to_double = x -> convert_pcm_to_double(x, bits_per_sample(fmt))
-    elseif isformat(fmt, WAVE_FORMAT_MULAW)
-        convert_to_double = x -> convert_pcm_to_double(x, 16)
-    elseif isformat(fmt, WAVE_FORMAT_ALAW)
-        convert_to_double = x -> convert_pcm_to_double(x, 16)
-    else
-        convert_to_double = x -> convert(Array{Float64}, x)
-    end
     samples = read_data(io, chunk_size, fmt, WAVNative, subrange)
-    convert_to_double(samples)
+    if isformat(fmt, WAVE_FORMAT_PCM)
+        convert_pcm_to_double(samples, bits_per_sample(fmt))
+    elseif isformat(fmt, WAVE_FORMAT_MULAW) || isformat(fmt, WAVE_FORMAT_ALAW)
+        convert_pcm_to_double(samples, 16)
+    else
+        convert(Array{Float64}, samples)
+    end
 end
 
 function write_pcm_samples{T<:Integer}(io::IO, fmt::WAVFormat, samples::Array{T})
@@ -642,7 +635,7 @@ make_range(subrange::Number) = 1:convert(Int, subrange)
 
 function wavread(io::IO, subrange=None, format=Float64)
     chunk_size = read_header(io)
-    samples = Array(Float64)
+    samples = None
     nbits = 0
     sample_rate = @compat Float32(0.0)
     opt = Dict{Symbol, Any}()
@@ -681,11 +674,16 @@ end
 
 function wavread(filename::String; subrange=None, format=Float64)
     open(filename, "r") do io
-        wavread(io, subrange=subrange, format=format)
+        wavread(io, subrange, format)
     end
 end
 
-# These are the MATLAB compatible signatures
+function wavread(filename::String, subrange, format)
+    open(filename, "r") do io
+        wavread(io, subrange, format)
+    end
+end
+
 function wavread(io::IO; subrange=None, format=Float64)
     if typeof(format) <: AbstractString
         if format == "double"
