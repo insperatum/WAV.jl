@@ -531,7 +531,6 @@ end
 
 # support every bit width from 1 to 8 bits
 convert_pcm_to_double(samples::Array{UInt8}, nbits::Integer) = convert(Array{Float64}, samples) ./ (2^nbits - 1) .* 2.0 .- 1.0
-convert_pcm_to_double(::Array{Int8}, ::Integer) = error("WAV files use offset binary for less than 9 bits")
 # support every bit width from 9 to 64 bits
 convert_pcm_to_double{T<:Signed}(samples::Array{T}, nbits::Integer) = convert(Array{Float64}, samples) / (2^(nbits - 1) - 1)
 
@@ -631,9 +630,13 @@ make_range(subrange, chunk_size, fmt) = 1:convert(UInt, chunk_size / fmt.block_a
 make_range(subrange::Range, chunk_size, fmt) = subrange
 make_range(subrange::Number, chunk_size, fmt) = 1:convert(Int, subrange)
 
-function wavread(io::IO, format=ConvertToDouble(), subrange=None)
+default_samples(::Type{GetNative}) = []
+default_samples(::Type{GetSize}) = (0, 0)
+default_samples(::Type{ConvertToDouble}) = Array{Float64}[]
+
+function wavread{ReadBehavior}(io::IO, how::ReadBehavior=ConvertToDouble(), subrange=None)
     chunk_size = read_header(io)
-    samples = None
+    samples = default_samples(ReadBehavior)
     nbits = 0
     sample_rate = @compat Float32(0.0)
     opt = Dict{Symbol, Any}()
@@ -662,7 +665,7 @@ function wavread(io::IO, format=ConvertToDouble(), subrange=None)
             nbits = oftype(nbits, bits_per_sample(fmt))
             opt[:fmt] = fmt
         elseif subchunk_id == b"data"
-            samples = read_data(io, subchunk_size, fmt, format, make_range(subrange, subchunk_size, fmt))
+            samples = read_data(io, subchunk_size, fmt, how, make_range(subrange, subchunk_size, fmt))
         else
             opt[symbol(subchunk_id)] = read(io, UInt8, subchunk_size)
         end
