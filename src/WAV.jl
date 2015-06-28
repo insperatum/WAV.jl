@@ -68,9 +68,11 @@ end
 read_le(stream::IO, ::Type{Float32}) = box(Float32, unbox(UInt32, read_le(stream, UInt32)))
 read_le(stream::IO, ::Type{Float64}) = box(Float64, unbox(UInt64, read_le(stream, UInt64)))
 
-immutable WAVNative
+immutable GetNative
 end
-immutable WAVSize
+immutable GetSize
+end
+immutable ConvertToDouble
 end
 
 # used by WAVE_FORMAT_EXTENSIBLE
@@ -533,11 +535,11 @@ convert_pcm_to_double(::Array{Int8}, ::Integer) = error("WAV files use offset bi
 # support every bit width from 9 to 64 bits
 convert_pcm_to_double{T<:Signed}(samples::Array{T}, nbits::Integer) = convert(Array{Float64}, samples) / (2^(nbits - 1) - 1)
 
-function read_data(::IO, chunk_size, fmt::WAVFormat, ::Type{WAVSize}, subrange)
+function read_data(::IO, chunk_size, fmt::WAVFormat, ::GetSize, subrange)
     convert(Int, chunk_size / fmt.block_align), convert(Int, fmt.nchannels)
 end
 
-function read_data(io::IO, chunk_size, fmt::WAVFormat, ::Type{WAVNative}, subrange)
+function read_data(io::IO, chunk_size, fmt::WAVFormat, ::GetNative, subrange)
     if isformat(fmt, WAVE_FORMAT_PCM)
         read_pcm_samples(io, fmt, subrange)
     elseif isformat(fmt, WAVE_FORMAT_IEEE_FLOAT)
@@ -551,8 +553,8 @@ function read_data(io::IO, chunk_size, fmt::WAVFormat, ::Type{WAVNative}, subran
     end
 end
 
-function read_data(io::IO, chunk_size, fmt::WAVFormat, ::Type{Float64}, subrange)
-    samples = read_data(io, chunk_size, fmt, WAVNative, subrange)
+function read_data(io::IO, chunk_size, fmt::WAVFormat, ::ConvertToDouble, subrange)
+    samples = read_data(io, chunk_size, fmt, GetNative(), subrange)
     if isformat(fmt, WAVE_FORMAT_PCM)
         convert_pcm_to_double(samples, bits_per_sample(fmt))
     elseif isformat(fmt, WAVE_FORMAT_MULAW) || isformat(fmt, WAVE_FORMAT_ALAW)
@@ -629,7 +631,7 @@ make_range(subrange, chunk_size, fmt) = 1:convert(UInt, chunk_size / fmt.block_a
 make_range(subrange::Range, chunk_size, fmt) = subrange
 make_range(subrange::Number, chunk_size, fmt) = 1:convert(Int, subrange)
 
-function wavread(io::IO, format=Float64, subrange=None)
+function wavread(io::IO, format=ConvertToDouble(), subrange=None)
     chunk_size = read_header(io)
     samples = None
     nbits = 0
@@ -668,26 +670,26 @@ function wavread(io::IO, format=Float64, subrange=None)
     return samples, sample_rate, nbits, opt
 end
 
-function wavread(filename::String; subrange=None, format=Float64)
+function wavread(filename::String; subrange=None, format=ConvertToDouble())
     open(filename, "r") do io
         wavread(io, format, subrange)
     end
 end
 
-function wavread(filename::String, format=Float64, subrange=None)
+function wavread(filename::String, format=ConvertToDouble(), subrange=None)
     open(filename, "r") do io
         wavread(io, format, subrange)
     end
 end
 
-function wavread(io::IO; subrange=None, format=Float64)
+function wavread(io::IO; subrange=None, format=ConvertToDouble())
     if typeof(format) <: AbstractString
         if format == "double"
-            format = Float64
+            format = ConvertToDouble()
         elseif format == "native"
-            format = WAVNative
+            format = GetNative()
         elseif format == "size"
-            format = WAVSize
+            format = GetSize()
         end
     end
     wavread(io, format, subrange)
