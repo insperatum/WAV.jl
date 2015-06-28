@@ -68,6 +68,11 @@ end
 read_le(stream::IO, ::Type{Float32}) = box(Float32, unbox(UInt32, read_le(stream, UInt32)))
 read_le(stream::IO, ::Type{Float64}) = box(Float64, unbox(UInt64, read_le(stream, UInt64)))
 
+immutable WAVNative
+end
+immutable WAVSize
+end
+
 # used by WAVE_FORMAT_EXTENSIBLE
 immutable WAVFormatExtension
     nbits::UInt16 # overrides nbits in WAVFormat type
@@ -528,11 +533,12 @@ convert_pcm_to_double(::Array{Int8}, ::Integer) = error("WAV files use offset bi
 # support every bit width from 9 to 64 bits
 convert_pcm_to_double{T<:Signed}(samples::Array{T}, nbits::Integer) = convert(Array{Float64}, samples) / (2^(nbits - 1) - 1)
 
-function read_data(io::IO, chunk_size, fmt::WAVFormat, format, subrange)
-    # "format" is the format of values, while "fmt" is the WAV file level format
-    samples = None
-    convert_to_double = x -> convert(Array{Float64}, x)
+function read_data(::IO, chunk_size, fmt::WAVFormat, ::Type{WAVSize}, subrange)
+    convert(Int, chunk_size / fmt.block_align), convert(Int, fmt.nchannels)
+end
 
+function read_data(io::IO, chunk_size, fmt::WAVFormat, ::Type{WAVNative}, subrange)
+    samples = None
     if subrange === None
         # each block stores fmt.nchannels channels
         subrange = 1:convert(UInt, chunk_size / fmt.block_align)
@@ -551,10 +557,21 @@ function read_data(io::IO, chunk_size, fmt::WAVFormat, format, subrange)
     else
         error("$(fmt.compression_code) is an unsupported compression code!")
     end
-    if format == "double"
-        samples = convert_to_double(samples)
-    end
     samples
+end
+
+function read_data(io::IO, chunk_size, fmt::WAVFormat, ::Type{Float64}, subrange)
+    if isformat(fmt, WAVE_FORMAT_PCM)
+        convert_to_double = x -> convert_pcm_to_double(x, bits_per_sample(fmt))
+    elseif isformat(fmt, WAVE_FORMAT_MULAW)
+        convert_to_double = x -> convert_pcm_to_double(x, 16)
+    elseif isformat(fmt, WAVE_FORMAT_ALAW)
+        convert_to_double = x -> convert_pcm_to_double(x, 16)
+    else
+        convert_to_double = x -> convert(Array{Float64}, x)
+    end
+    samples = read_data(io, chunk_size, fmt, WAVNative, subrange)
+    convert_to_double(samples)
 end
 
 function write_pcm_samples{T<:Integer}(io::IO, fmt::WAVFormat, samples::Array{T})
@@ -623,7 +640,7 @@ end
 make_range(subrange) = subrange
 make_range(subrange::Number) = 1:convert(Int, subrange)
 
-function wavread(io::IO; subrange=None, format="double")
+function wavread(io::IO, subrange=None, format=Float64)
     chunk_size = read_header(io)
     samples = Array(Float64)
     nbits = 0
@@ -654,9 +671,6 @@ function wavread(io::IO; subrange=None, format="double")
             nbits = bits_per_sample(fmt)
             opt[:fmt] = fmt
         elseif subchunk_id == b"data"
-            if format == "size"
-                return convert(Int, subchunk_size / fmt.block_align), convert(Int, fmt.nchannels)
-            end
             samples = read_data(io, subchunk_size, fmt, format, make_range(subrange))
         else
             opt[symbol(subchunk_id)] = read(io, UInt8, subchunk_size)
@@ -665,16 +679,26 @@ function wavread(io::IO; subrange=None, format="double")
     return samples, sample_rate, nbits, opt
 end
 
-function wavread(filename::String; subrange=None, format="double")
+function wavread(filename::String; subrange=None, format=Float64)
     open(filename, "r") do io
         wavread(io, subrange=subrange, format=format)
     end
 end
 
 # These are the MATLAB compatible signatures
+function wavread(io::IO; subrange=None, format=Float64)
+    if typeof(format) <: AbstractString
+        if format == "double"
+            format = Float64
+        elseif format == "native"
+            format = WAVNative
+        elseif format == "size"
+            format = WAVSize
+        end
+    end
+    wavread(io, subrange, format)
+end
 wavread(filename::String, fmt::String) = wavread(filename, format=fmt)
-wavread(filename::String, n) = wavread(filename, subrange=n)
-wavread(filename::String, n, fmt) = wavread(filename, subrange=n, format=fmt)
 
 get_default_compression{T<:Integer}(::Array{T}) = WAVE_FORMAT_PCM
 get_default_compression{T<:FloatingPoint}(::Array{T}) = WAVE_FORMAT_IEEE_FLOAT

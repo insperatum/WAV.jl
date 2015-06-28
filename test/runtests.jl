@@ -142,7 +142,7 @@ for fs = (8000,11025,22050,44100,48000,96000,192000), nbits = (1,7,8,9,12,16,20,
     ## Check that wavread works on the wavwrite produced memory
     seek(io, 0)
     sz = WAV.wavread(io, format="size")
-    @assert sz == (nsamples, nchans)
+    @test sz[1] == (nsamples, nchans)
 
     seek(io, 0)
     out_data, out_fs, out_nbits, out_extra = WAV.wavread(io)
@@ -353,7 +353,7 @@ for nbits = (8, 16), nsamples = convert(Array{Int}, [0; logspace(1, 4, 4)]), nch
     ## Check that wavread works on the wavwrite produced memory
     seek(io, 0)
     sz = WAV.wavread(io, format="size")
-    @assert sz == (nsamples, nchans)
+    @test sz[1] == (nsamples, nchans)
 
     seek(io, 0)
     out_data, out_fs, out_nbits, out_extra = WAV.wavread(io)
@@ -430,7 +430,7 @@ for nbits = (32, 64), nsamples = convert(Array{Int}, [0; logspace(1, 4, 4)]), nc
     ## Check that wavread works on the wavwrite produced memory
     seek(io, 0)
     sz = WAV.wavread(io, format="size")
-    @assert sz == (nsamples, nchans)
+    @test sz[1] == (nsamples, nchans)
 
     seek(io, 0)
     out_data, out_fs, out_nbits, out_extra = WAV.wavread(io)
