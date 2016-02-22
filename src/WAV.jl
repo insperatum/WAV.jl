@@ -225,7 +225,7 @@ function read_pcm_samples(io::IO, fmt::WAVFormat, subrange)
     if nbits <= 8
         mask = @compat UInt64(0)
     end
-    skip(io, convert(UInt, (first(subrange) - 1) * nbytes * fmt.nchannels))
+    read(io, convert(UInt, (first(subrange) - 1) * nbytes * fmt.nchannels))
     for i = 1:size(samples, 1)
         for j = 1:size(samples, 2)
             raw_sample = read(io, UInt8, nbytes)
@@ -249,7 +249,7 @@ function read_ieee_float_samples(io::IO, fmt::WAVFormat, subrange, floatType)
     const nblocks = length(subrange)
     samples = Array(floatType, nblocks, fmt.nchannels)
     const nbits = bits_per_sample(fmt)
-    skip(io, convert(UInt, (first(subrange) - 1) * (nbits / 8) * fmt.nchannels))
+    read(io, convert(UInt, (first(subrange) - 1) * (nbits / 8) * fmt.nchannels))
     for i = 1:nblocks
         for j = 1:fmt.nchannels
             samples[i, j] = read_le(io, floatType)
@@ -270,7 +270,7 @@ function read_companded_samples(io::IO, fmt::WAVFormat, subrange, table)
     end
     const nblocks = length(subrange)
     samples = Array(eltype(table), nblocks, fmt.nchannels)
-    skip(io, convert(UInt, (first(subrange) - 1) * fmt.nchannels))
+    read(io, convert(UInt, (first(subrange) - 1) * fmt.nchannels))
     for i = 1:nblocks
         for j = 1:fmt.nchannels
             # add one to value from blocks because A-law stores values from 0 to 255.
